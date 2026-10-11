@@ -4,6 +4,12 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+## [1.0.2] - 2026-10-11
+
+### Fixed
+
+- Device tools refused every track inside a group with "Bitwig did not select the requested track", even though Bitwig had selected it. The check compared track positions, which Bitwig counts within the group for the selected track but across the whole project in the track list. The bridge now asks Bitwig whether the selected track is the requested one. Tested with the Ferrous Rhythm demo project in Bitwig Studio 6.3.
+
 ## [1.0.1] - 2026-10-10
 
 Fixes a case where the bridge could stop responding until Bitwig was restarted, and reports tempo, mixer and parameter changes as errors when Bitwig does not confirm them. Tested with Bitwig Studio 6.1.3.
@@ -45,6 +51,7 @@ First release of Bitwig Control Deck, a local MCP bridge that lets an AI agent c
 - Local dashboard at `http://127.0.0.1:50703` showing bridge health, the current session, loaded devices and a searchable inventory of installed VST3, VST2, Audio Unit and CLAP plug-ins. Its Connect page has copy-paste setup guides for Claude Code, Codex, Cursor, VS Code, Gemini CLI, local LLM setups and other MCP clients.
 - Local operation: the status service and dashboard listen on this Mac only, and every request to the Bitwig bridge must carry a secret generated for your install.
 
-[Unreleased]: https://github.com/remymazmanian/bitwig-control-deck/compare/v1.0.1...HEAD
+https://github.com/remymazmanian/bitwig-control-deck/compare/v1.0.2...HEAD
+[1.0.2]: https://github.com/remymazmanian/bitwig-control-deck/releases/tag/v1.0.2
 [1.0.1]: https://github.com/remymazmanian/bitwig-control-deck/releases/tag/v1.0.1
 [1.0.0]: https://github.com/remymazmanian/bitwig-control-deck/releases/tag/v1.0.0

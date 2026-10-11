@@ -1,13 +1,13 @@
 loadAPI(18);
 
-host.defineController("Control Deck", "Control Deck Bridge", "1.0.1", "BC47EFA3-FFD7-4155-9AE6-164DB3E58E89");
+host.defineController("Control Deck", "Control Deck Bridge", "1.0.2", "BC47EFA3-FFD7-4155-9AE6-164DB3E58E89");
 host.defineMidiPorts(1, 1);
 // Control Deck's native macOS helper publishes these private virtual endpoints. They
 // give Bitwig a device identity for auto-add; control data uses an authenticated
 // local UDP channel that never leaves this Mac.
 host.addDeviceNameBasedDiscoveryPair(["Control Deck Bridge In"], ["Control Deck Bridge Out"]);
 
-var CONTROL_DECK_VERSION = "1.0.1";
+var CONTROL_DECK_VERSION = "1.0.2";
 var CONTROL_DECK_PROTOCOL = "control-deck/1";
 var CONTROL_DECK_PORT = 50701;
 // Stamped with a per-install secret by `npm run setup`. The bridge refuses to
@@ -29,6 +29,7 @@ var project;
 var transport;
 var trackBank;
 var cursorTrack;
+var trackIsCursor = [];
 var deviceBank;
 var cursorDevice;
 var cursorDeviceSlot;
@@ -289,12 +290,15 @@ function requireTrack(params) {
 
 function selectTrack(request, params, callback) {
    var track = requireTrack(params);
+   var index = Number(params.trackIndex);
    var expectedName = track.name().get();
-   var expectedPosition = track.position().get();
    track.selectInMixer();
    later(140, function() {
       try {
-         if (cursorTrack.name().get() !== expectedName || cursorTrack.position().get() !== expectedPosition) {
+         // Ask Bitwig whether the cursor now is this track. Comparing positions
+         // fails for tracks inside a group: the cursor reports its position
+         // within the group, the main track bank its position in the whole list.
+         if (cursorTrack.name().get() !== expectedName || !trackIsCursor[index].get()) {
             throw new Error("Bitwig did not select the requested track. No device operation was performed.");
          }
          callback(track);
@@ -2573,6 +2577,8 @@ function init() {
    for (var i = 0; i < MAX_TRACKS; i++) {
       var markedTrack = trackBank.getItemAt(i);
       markTrack(markedTrack);
+      trackIsCursor[i] = markedTrack.createEqualsValue(cursorTrack);
+      interested(trackIsCursor[i]);
       observeTrackMeter(markedTrack, i);
       for (var s = 0; s < MAX_SCENES; s++) markSlot(markedTrack.clipLauncherSlotBank().getItemAt(s));
    }
