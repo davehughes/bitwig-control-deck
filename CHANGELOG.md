@@ -4,6 +4,13 @@ The format follows [Keep a Changelog](https://keepachangelog.com/en/1.1.0/), and
 
 ## [Unreleased]
 
+### Added
+
+- `bitwig_select_track` selects one track and reports the group it sits in.
+- `bitwig_group_track` wraps one track in a new group with Bitwig's Group action, optionally names the group, and verifies the track's new parent.
+- `bitwig_drum_pads` lists the filled pads of a drum machine by MIDI key.
+- `bitwig_insert_drum_pad` loads a stock device, CLAP plug-in, or sample file onto one drum pad without opening the Browser, and verifies the pad's chain.
+
 ## [1.0.2] - 2026-10-11
 
 ### Fixed

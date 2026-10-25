@@ -165,3 +165,44 @@ test("set_track_mix fails with the values Bitwig actually holds", () => {
   assert.equal(responses[0].ok, false);
   assert.match(responses[0].payload.message, /volume is 0.5, requested 0.7; mute is false, requested true/);
 });
+
+test("insert_drum_pad refuses a request with more than one source", () => {
+  const { context, responses, advance, originalDispatch } = loadController();
+  context.dispatch = originalDispatch;
+  context.enqueue(5000, "1", "insert_drum_pad", {
+    trackIndex: 0, trackName: "Drums", deviceIndex: 0, deviceName: "Drum Machine",
+    padKey: 36, path: "/tmp/kick.wav", clapId: "com.example.kick"
+  }, 5000);
+  advance(10);
+  assert.equal(responses[0].ok, false);
+  assert.match(responses[0].payload.message, /exactly one of bitwigId, clapId, or path/);
+});
+
+test("insert_drum_pad refuses a pad key outside 0 to 127", () => {
+  const { context, responses, advance, originalDispatch } = loadController();
+  context.dispatch = originalDispatch;
+  context.enqueue(5000, "1", "insert_drum_pad", {
+    trackIndex: 0, trackName: "Drums", deviceIndex: 0, deviceName: "Drum Machine",
+    padKey: 128, path: "/tmp/kick.wav"
+  }, 5000);
+  advance(10);
+  assert.equal(responses[0].ok, false);
+  assert.match(responses[0].payload.message, /Pad key must be a MIDI note from 0 to 127/);
+});
+
+test("group_track fails when Bitwig does not add a group", () => {
+  const { context, responses, advance, originalDispatch } = loadController();
+  context.dispatch = originalDispatch;
+  const value = v => ({ get: () => v });
+  context.application = { getAction: () => ({ invoke() {} }) };
+  context.trackBank = { itemCount: () => value(3), getItemAt: () => ({ isGroup: () => value(false) }) };
+  context.cursorTrack = { isGroup: () => value(false) };
+  context.cursorParentTrack = { exists: () => value(true) };
+  context.cursorParentIsRoot = value(true);
+  context.trackIsCursor = [value(false), value(false), value(false)];
+  context.selectTrack = (request, params, callback) => callback();
+  context.enqueue(5000, "1", "group_track", { trackIndex: 1, trackName: "Kick" }, 5000);
+  advance(1200);
+  assert.equal(responses[0].ok, false);
+  assert.match(responses[0].payload.message, /the project has 3 tracks, expected 4/);
+});
