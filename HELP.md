@@ -110,7 +110,7 @@ Remote cloud connectors (claude.ai, ChatGPT) are deliberately unsupported — se
 
 ## MCP tool reference
 
-All 34 tools follow the same contract: **exact targets** (mutations require both index and current name; stale names are refused), **no preset loading** (only Bitwig's Devices browser is used), and **readback verification** (writes report the value Bitwig actually shows afterward).
+All 38 tools follow the same contract: **exact targets** (mutations require both index and current name; stale names are refused), **no preset loading** (only Bitwig's Devices browser is used), and **readback verification** (writes report the value Bitwig actually shows afterward).
 
 ### Status & session
 
@@ -127,6 +127,8 @@ All 34 tools follow the same contract: **exact targets** (mutations require both
 - **bitwig_set_track_mix** — Set exact mixer values on one verified track and read the resulting state back.
 - **bitwig_rename_track** — Rename one verified track without changing its routing.
 - **bitwig_delete_track** — Delete one exact track; the supplied name must still match, preventing index-drift mistakes.
+- **bitwig_select_track** — Select one verified track and report its parent group. A group track's own parent is not reported.
+- **bitwig_group_track** — Wrap one verified track in a new group with Bitwig's Group action, optionally naming the group, and verify the track's new parent.
 
 ### Clips & arrangement
 
@@ -147,6 +149,8 @@ All 34 tools follow the same contract: **exact targets** (mutations require both
 - **bitwig_save_device_preset** — Open Bitwig's native Save-to-Library flow for one verified device, without mouse automation.
 - **bitwig_delete_device** — Delete one exact device; both track and device names must still match.
 - **bitwig_open_device_window** — Open the native window for one exact device or plug-in.
+- **bitwig_drum_pads** — List the filled pads of one verified drum machine by MIDI key, with each pad's name and first device.
+- **bitwig_insert_drum_pad** — Insert a stock device (UUID), CLAP plug-in, or sample file onto one drum pad without opening the Browser, and verify the pad's chain.
 
 ### Samples
 

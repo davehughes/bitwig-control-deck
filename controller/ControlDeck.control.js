@@ -17,6 +17,7 @@ var MAX_TRACKS = 128;
 var MAX_DEVICES = 64;
 var MAX_SCENES = 8;
 var MAX_CUE_MARKERS = 256;
+var MAX_DRUM_PADS = 128;
 var BROWSER_PAGE = 128;
 var MAX_BROWSER_RESULTS = 16384;
 var CLIP_GRID_WIDTH = 256;
@@ -29,12 +30,16 @@ var project;
 var transport;
 var trackBank;
 var cursorTrack;
+var cursorParentTrack;
+var cursorParentIsRoot;
 var trackIsCursor = [];
 var deviceBank;
 var cursorDevice;
 var cursorDeviceSlot;
 var cursorRemoteControlsPage;
 var nestedDeviceBank;
+var drumPadBank;
+var drumPadDeviceBanks = [];
 var launcherClip;
 var arrangerClip;
 var sceneBank;
@@ -1357,6 +1362,174 @@ function handleRenameTrack(request) {
    });
 }
 
+// Follows the track cursor, so it is only meaningful after selectTrack. For a
+// selected group track Bitwig reports the group's own master as the parent, so
+// the real parent is unknown and this returns undefined.
+function cursorGroupName() {
+   if (cursorTrack.isGroup().get()) return undefined;
+   if (!cursorParentTrack.exists().get() || cursorParentIsRoot.get()) return null;
+   return cursorParentTrack.name().get();
+}
+
+function handleSelectTrack(request) {
+   var params = request.params;
+   selectTrack(request, params, function(track) {
+      later(80, function() {
+         var group = cursorGroupName();
+         finish(request, true, {
+            selected: trackSnapshot(track, Number(params.trackIndex)),
+            isGroup: track.isGroup().get(),
+            group: group === undefined ? null : group,
+            groupKnown: group !== undefined
+         });
+      });
+   });
+}
+
+function cursorTrackIndex() {
+   for (var i = 0; i < Math.min(trackBank.itemCount().get(), MAX_TRACKS); i++) {
+      if (trackIsCursor[i].get()) return i;
+   }
+   return -1;
+}
+
+// Wraps one track in a new group with Bitwig's Group action. Bitwig selects the
+// new group, and renumbers default names such as "Audio 2", so the track is
+// found as the group's first child rather than by name.
+function handleGroupTrack(request) {
+   var params = request.params;
+   var groupName = params.groupName === undefined || params.groupName === null ? null : String(params.groupName).trim();
+   if (groupName !== null && (!groupName || groupName.length > 120)) throw new Error("Group name must contain 1 to 120 characters.");
+   var groupAction = application.getAction("Group");
+   if (!groupAction) throw new Error("Bitwig's Group action is not available.");
+
+   selectTrack(request, params, function() {
+      var previousGroup = cursorGroupName();
+      var before = trackBank.itemCount().get();
+      groupAction.invoke();
+      verifyReadback(request, function() {
+         var after = trackBank.itemCount().get();
+         var groupIndex = cursorTrackIndex();
+         if (after !== before + 1) return "the project has " + after + " tracks, expected " + (before + 1);
+         if (groupIndex < 0 || !trackBank.getItemAt(groupIndex).isGroup().get()) return "Bitwig did not select a new group";
+         return "";
+      }, function() {
+         var groupIndex = cursorTrackIndex();
+         var group = trackBank.getItemAt(groupIndex);
+         if (groupName) group.name().set(groupName);
+         var child = { trackIndex: groupIndex + 1, trackName: trackBank.getItemAt(groupIndex + 1).name().get() };
+         selectTrack(request, child, function(track) {
+            // A grouped group track can't report its parent, so only its name is checked.
+            var parentKnown = cursorGroupName() !== undefined;
+            verifyReadback(request, function() {
+               if (parentKnown && cursorGroupName() !== group.name().get()) return "the track's group is ‘" + cursorGroupName() + "’, not ‘" + group.name().get() + "’";
+               if (groupName && group.name().get() !== groupName) return "the group is named ‘" + group.name().get() + "’, requested ‘" + groupName + "’";
+               return "";
+            }, function() {
+               finish(request, true, {
+                  group: trackSnapshot(group, groupIndex),
+                  track: trackSnapshot(track, groupIndex + 1),
+                  previousGroup: previousGroup === undefined ? "unknown" : previousGroup,
+                  verifiedByParentReadback: parentKnown
+               });
+            });
+         });
+      });
+   });
+}
+
+function noteName(key) {
+   var names = ["C", "C#", "D", "D#", "E", "F", "F#", "G", "G#", "A", "A#", "B"];
+   return names[key % 12] + (Math.floor(key / 12) - 2);
+}
+
+function drumPadSnapshot(key) {
+   var pad = drumPadBank.getItemAt(key);
+   var devices = drumPadDeviceBanks[key];
+   var deviceCount = devices.itemCount().get();
+   return {
+      key: key,
+      note: noteName(key),
+      name: pad.name().get(),
+      deviceCount: deviceCount,
+      firstDevice: deviceCount > 0 ? devices.getItemAt(0).name().get() : null,
+      mute: pad.mute().get(),
+      solo: pad.solo().get()
+   };
+}
+
+// Pad bank item n is MIDI key n only while the bank is scrolled to 0.
+function selectDrumMachine(request, params, callback) {
+   selectDevice(request, params, function(device) {
+      if (!cursorDevice.hasDrumPads().get()) throw new Error("Device ‘" + params.deviceName + "’ has no drum pads.");
+      drumPadBank.scrollPosition().set(0);
+      later(150, function() {
+         if (drumPadBank.scrollPosition().get() !== 0) throw new Error("Bitwig did not scroll the drum pad bank to the first pad.");
+         callback(device);
+      });
+   });
+}
+
+function handleListDrumPads(request) {
+   var params = request.params;
+   selectDrumMachine(request, params, function(device) {
+      var pads = [];
+      for (var key = 0; key < MAX_DRUM_PADS; key++) {
+         var snapshot = drumPadSnapshot(key);
+         if (snapshot.deviceCount > 0) pads.push(snapshot);
+      }
+      finish(request, true, { device: deviceSnapshot(device, Number(params.deviceIndex)), filledPads: pads.length, pads: pads });
+   });
+}
+
+function handleInsertDrumPad(request) {
+   var params = request.params;
+   var key = Number(params.padKey);
+   if (!(key >= 0 && key < MAX_DRUM_PADS && Math.floor(key) === key)) throw new Error("Pad key must be a MIDI note from 0 to 127.");
+   var sources = ["bitwigId", "clapId", "path"].filter(function(name) {
+      return params[name] !== undefined && params[name] !== null;
+   });
+   if (sources.length !== 1) throw new Error("Supply exactly one of bitwigId, clapId, or path.");
+   var source = String(params[sources[0]]).trim();
+   if (sources[0] === "bitwigId" && !/^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i.test(source)) {
+      throw new Error("A valid Bitwig device UUID is required.");
+   }
+   if (sources[0] === "path" && (source.charAt(0) !== "/" || !/\.(wav|aif|aiff|flac)$/i.test(source))) {
+      throw new Error("Sample path must be an absolute WAV, AIFF, or FLAC file path.");
+   }
+
+   selectDrumMachine(request, params, function(device) {
+      var before = drumPadDeviceBanks[key].itemCount().get();
+      var insertionPoint = drumPadBank.getItemAt(key).insertionPoint();
+      if (sources[0] === "bitwigId") insertionPoint.insertBitwigDevice(java.util.UUID.fromString(source));
+      else if (sources[0] === "clapId") insertionPoint.insertCLAPDevice(source);
+      else insertionPoint.insertFile(source);
+      // A pad that was empty doesn't report its new device until the drum
+      // machine is selected again, so re-select before polling.
+      var attempts = 0;
+      function verifyPad() {
+         var pad = drumPadSnapshot(key);
+         if (pad.deviceCount <= before) {
+            if (++attempts < 10) {
+               later(200, verifyPad);
+               return;
+            }
+            throw new Error("Bitwig did not add a device to pad " + pad.note + ". Nothing was inserted.");
+         }
+         finish(request, true, {
+            device: deviceSnapshot(device, Number(params.deviceIndex)),
+            inserted: { kind: sources[0], value: source },
+            pad: pad,
+            previousDeviceCount: before,
+            verifiedByPadReadback: true
+         });
+      }
+      later(600, function() {
+         selectDrumMachine(request, params, verifyPad);
+      });
+   });
+}
+
 function validateClipNotes(notes, stepSize, lengthBeats) {
    if (!Array.isArray(notes)) throw new Error("Clip notes must be an array.");
    if (notes.length > 4096) throw new Error("A Control Deck clip can contain at most 4096 notes.");
@@ -2104,6 +2277,18 @@ function dispatch(request) {
       case "rename_track":
          handleRenameTrack(request);
          return;
+      case "select_track":
+         handleSelectTrack(request);
+         return;
+      case "group_track":
+         handleGroupTrack(request);
+         return;
+      case "list_drum_pads":
+         handleListDrumPads(request);
+         return;
+      case "insert_drum_pad":
+         handleInsertDrumPad(request);
+         return;
       case "delete_track":
          var track = requireTrack(params);
          var deletedTrack = trackSnapshot(track, Number(params.trackIndex));
@@ -2452,6 +2637,7 @@ function markTrack(track) {
    interested(track.exists());
    interested(track.name());
    interested(track.trackType());
+   interested(track.isGroup());
    interested(track.position());
    interested(track.mute());
    interested(track.solo());
@@ -2504,8 +2690,10 @@ function init() {
    trackBank = host.createMainTrackBank(MAX_TRACKS, 0, MAX_SCENES);
    sceneBank = trackBank.sceneBank();
    cursorTrack = host.createCursorTrack("CONTROL_DECK_TRACK_CURSOR", "Control Deck Track Cursor", 0, MAX_SCENES, true);
+   cursorParentTrack = cursorTrack.createParentTrack(0, 0);
    cursorDevice = cursorTrack.createCursorDevice();
    cursorDeviceSlot = cursorDevice.getCursorSlot();
+   drumPadBank = cursorDevice.createDrumPadBank(MAX_DRUM_PADS);
    cursorRemoteControlsPage = cursorDevice.createCursorRemoteControlsPage(8);
    nestedDeviceBank = cursorDeviceSlot.createDeviceBank(MAX_DEVICES);
    deviceBank = cursorTrack.createDeviceBank(MAX_DEVICES);
@@ -2521,6 +2709,22 @@ function init() {
    interested(cursorTrack.exists());
    interested(cursorTrack.name());
    interested(cursorTrack.position());
+   interested(cursorTrack.isGroup());
+   interested(cursorParentTrack.exists());
+   interested(cursorParentTrack.name());
+   cursorParentIsRoot = interested(cursorParentTrack.createEqualsValue(project.getRootTrackGroup()));
+   interested(cursorDevice.hasDrumPads());
+   interested(drumPadBank.scrollPosition());
+   for (var padKey = 0; padKey < MAX_DRUM_PADS; padKey++) {
+      var pad = drumPadBank.getItemAt(padKey);
+      interested(pad.exists());
+      interested(pad.name());
+      interested(pad.mute());
+      interested(pad.solo());
+      drumPadDeviceBanks[padKey] = pad.createDeviceBank(1);
+      interested(drumPadDeviceBanks[padKey].itemCount());
+      interested(drumPadDeviceBanks[padKey].getItemAt(0).name());
+   }
    interested(deviceBank.itemCount());
    interested(deviceBank.scrollPosition());
    interested(nestedDeviceBank.itemCount());

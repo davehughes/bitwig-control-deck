@@ -34,9 +34,10 @@ Everything runs on your machine and binds only to loopback addresses. Nothing is
 - Status and transport
 - List, create, position, and rename Arranger cue markers with readback verification
 - Build Arranger MIDI clips from existing launcher patterns at exact beat positions
-- List, create, and safely delete tracks
+- List, create, select, group, and safely delete tracks
 - List and safely delete devices
 - Search the Devices browser and insert one exact device
+- List drum machine pads and load devices or samples onto a pad
 - Read the full direct parameter list for native and third-party devices
 - Set a parameter by stable ID with readback
 - Open a plug-in/device window

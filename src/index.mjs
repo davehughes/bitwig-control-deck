@@ -168,6 +168,17 @@ server.registerTool("bitwig_rename_track", {
   }
 }, async args => call("rename_track", args));
 
+server.registerTool("bitwig_select_track", {
+  description: "Select one verified track and report the group it sits in. A group track's own parent group is not reported (groupKnown is false).",
+  inputSchema: trackSelector
+}, async args => call("select_track", args));
+server.registerTool("bitwig_group_track", {
+  description: "Wrap one verified track in a new group track with Bitwig's Group action, optionally naming the group, and verify the track's new parent.",
+  inputSchema: {
+    ...trackSelector,
+    groupName: z.string().min(1).max(120).optional()
+  }
+}, async args => call("group_track", args, 15000));
 server.registerTool("bitwig_delete_track", {
   description: "Delete one exact track. The supplied name must still match, preventing index drift mistakes.",
   inputSchema: trackSelector
@@ -308,6 +319,20 @@ server.registerTool("bitwig_insert_sample_file", {
   }
 }, async args => call("insert_sample_file", args, 20000));
 
+server.registerTool("bitwig_drum_pads", {
+  description: "List the filled pads of one verified drum machine device, by MIDI key, with each pad's name and first device.",
+  inputSchema: deviceSelector
+}, async args => call("list_drum_pads", args, 10000));
+server.registerTool("bitwig_insert_drum_pad", {
+  description: "Insert a stock Bitwig device, a CLAP plug-in, or a WAV/AIFF/FLAC sample onto one drum pad of a verified drum machine without opening the Browser, and verify the pad's device chain.",
+  inputSchema: {
+    ...deviceSelector,
+    padKey: z.number().int().min(0).max(127).describe("MIDI key of the pad; 36 is C1"),
+    bitwigId: z.string().uuid().optional().describe("Stable Bitwig device UUID"),
+    clapId: z.string().min(1).optional().describe("Stable CLAP ID"),
+    path: z.string().min(1).optional().describe("Absolute WAV, AIFF, or FLAC path; loads into a new Sampler")
+  }
+}, async args => call("insert_drum_pad", args, 20000));
 server.registerTool("bitwig_delete_device", {
   description: "Delete one exact device. Both the track and device names must still match.",
   inputSchema: deviceSelector
