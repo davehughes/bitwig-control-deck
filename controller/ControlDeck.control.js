@@ -383,6 +383,11 @@ function selectDevice(request, params, callback) {
                }
                // The direct-parameter observer follows the cursor device. Give
                // it one additional update cycle before any read or write.
+               // Bitwig does not resend display strings when the cursor moves
+               // between devices with identical parameter IDs, so resubscribe.
+               directDisplays = {};
+               directDisplayObserver.setObservedParameterIds([]);
+               directDisplayObserver.setObservedParameterIds(directIds);
                later(100, function() {
                   try {
                      callback(device);
