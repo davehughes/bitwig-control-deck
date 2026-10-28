@@ -161,6 +161,7 @@ All 34 tools follow the same contract: **exact targets** (mutations require both
 - **bitwig_remote_controls** — Show the compact eight-knob Remote Controls section for one exact device; optionally select a named page.
 - **bitwig_selected_device_remote_controls** — Show or hide Remote Controls for the currently selected device, including nested devices.
 - **bitwig_set_remote_control** — Set one visible Remote Control by page and control name via the same native path as the on-screen knobs, then verify.
+- **bitwig_rename_remote_control** — Rename one Remote Control by page and control name or index, then verify the new name.
 
 ### Plug-in library
 

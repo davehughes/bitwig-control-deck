@@ -355,6 +355,18 @@ server.registerTool("bitwig_set_remote_control", {
   }
 }, async args => call("set_remote_control", args, 10000));
 
+server.registerTool("bitwig_rename_remote_control", {
+  description: "Rename one Bitwig Remote Control by page and control name or index, then verify the new name through Bitwig readback.",
+  inputSchema: {
+    ...deviceSelector,
+    pageName: z.string().min(1).optional(),
+    pageIndex: z.number().int().nonnegative().optional(),
+    controlName: z.string().min(1).optional(),
+    controlIndex: z.number().int().min(0).max(7).optional(),
+    newName: z.string().min(1)
+  }
+}, async args => call("rename_remote_control", args, 10000));
+
 server.registerTool("bitwig_set_device_parameter", {
   description: "Set one device parameter by its stable ID and verify the normalized value through Bitwig readback.",
   inputSchema: {

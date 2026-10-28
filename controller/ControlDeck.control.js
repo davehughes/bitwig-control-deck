@@ -2372,6 +2372,63 @@ function dispatch(request) {
             });
          });
          return;
+      case "rename_remote_control":
+         selectDevice(request, params, function() {
+            var newName = String(params.newName || "").trim();
+            if (!newName) {
+               finish(request, false, { message: "A new Remote Control name is required." });
+               return;
+            }
+            var pageNames = arrayCopy(cursorRemoteControlsPage.pageNames().get());
+            var pageIndex = params.pageIndex === undefined
+               ? pageNames.indexOf(String(params.pageName || ""))
+               : Number(params.pageIndex);
+            if (!(pageIndex >= 0 && pageIndex < pageNames.length)) {
+               finish(request, false, { message: "Remote Controls page was not found." });
+               return;
+            }
+            cursorRemoteControlsPage.selectedPageIndex().set(pageIndex);
+            later(200, function() {
+               var controlIndex = params.controlIndex === undefined ? -1 : Number(params.controlIndex);
+               if (controlIndex < 0 && params.controlName !== undefined) {
+                  var requestedName = String(params.controlName);
+                  for (var i = 0; i < 8; i++) {
+                     if (cursorRemoteControlsPage.getParameter(i).name().get() === requestedName) {
+                        controlIndex = i;
+                        break;
+                     }
+                  }
+               }
+               if (!(controlIndex >= 0 && controlIndex < 8)) {
+                  finish(request, false, { message: "Remote control was not found on page ‘" + pageNames[pageIndex] + "’." });
+                  return;
+               }
+               var control = cursorRemoteControlsPage.getParameter(controlIndex);
+               if (!control.exists().get()) {
+                  finish(request, false, { message: "The requested Remote Control slot is empty." });
+                  return;
+               }
+               var oldName = control.name().get();
+               control.name().set(newName);
+               later(300, function() {
+                  var actual = control.name().get();
+                  if (actual !== newName) {
+                     finish(request, false, {
+                        message: "Bitwig did not confirm the new name: control " + controlIndex + " on page ‘" +
+                           pageNames[pageIndex] + "’ reads ‘" + actual + "’. Device-defined pages may not accept renames."
+                     });
+                     return;
+                  }
+                  finish(request, true, {
+                     pageIndex: pageIndex,
+                     pageName: pageNames[pageIndex],
+                     controlIndex: controlIndex,
+                     renamed: { oldName: oldName, newName: actual }
+                  });
+               });
+            });
+         });
+         return;
       case "set_parameter":
          selectDevice(request, params, function(device) {
             var id = String(params.parameterId);
